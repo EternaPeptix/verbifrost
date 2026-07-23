@@ -45,26 +45,29 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design and
 
 ## Status
 
-**Phase 0 — Research & Reconnaissance** (in progress, major findings)
+**Phase 0 — Research & Reconnaissance** (in progress, **paradigm-shifting findings**)
 
-No code yet, but research has uncovered two critical discoveries that
-significantly reduce the project's scope:
+Three discoveries fundamentally change the project:
 
-1. **Apple's mlx5 dext contains the complete RDMA command set** — all QP,
-   CQ, PD, MR, and RoCEv2 address management commands are compiled into
-   `DriverKit-AppleEthernetMLX5.dext` but never exposed. See
-   [docs/research/mlx5-driver-analysis.md](docs/research/mlx5-driver-analysis.md).
+1. **macOS has `librdma.dylib`** — a fully functional `libibverbs`-compatible
+   library in the dyld shared cache. Verified live: `ibv_get_device_list()`
+   returns 6 RDMA devices. Standard ibv_* API (QP, CQ, MR, PD, modify_qp)
+   all work. See [docs/research/librdma-discovery.md](docs/research/librdma-discovery.md).
 
-2. **Apple has a private RDMA framework (`IORDMAFamily`)** with a userspace
-   UserClient (`IORDMAFamilyUC`). This is Apple's equivalent of Linux's
-   `ib_core` + uverbs. It's currently Thunderbolt-only, but if the verbs
-   layer is transport-agnostic, it could be reused for RoCEv2. See
+2. **macOS has `IORDMAFamily.kext`** — a kernel RDMA framework (Apple's
+   `ib_core`) with a UserClient (`IORDMAFamilyUC`). This is the backend that
+   `librdma.dylib` calls into. See
    [docs/research/iordma-family-discovery.md](docs/research/iordma-family-discovery.md).
 
-> **Note:** Mac↔Mac RDMA already works today via Apple's jaccl backend.
-> The goal of Verbifrost is **Mac↔DGX Spark RDMA over Ethernet/RoCEv2** —
-> bridging the heterogeneous gap. The IORDMAFamily discovery is valuable
-> only if it can be extended to non-Thunderbolt transports.
+3. **Apple's mlx5 dext contains the full RDMA command set** — all QP, CQ,
+   PD, MR, and RoCEv2 commands (`SET_ROCE_ADDRESS`, `CREATE_QP`, etc.) are
+   compiled into `DriverKit-AppleEthernetMLX5.dext`. See
+   [docs/research/mlx5-driver-analysis.md](docs/research/mlx5-driver-analysis.md).
+
+**Bottom line:** The entire RDMA stack already exists on macOS — userspace
+library, kernel framework, and hardware command code. The only missing piece
+is an `IORDMAFamily` provider for the ConnectX card. That's what Verbifrost
+will build, reducing the project from ~2 years to ~4-6 months.
 
 ## Who we need
 
