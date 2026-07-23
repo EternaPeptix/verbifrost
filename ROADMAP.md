@@ -1,128 +1,89 @@
 # Roadmap
 
-Verbifrost is a large systems project. This document breaks it into phases
-with concrete deliverables, dependencies, and success criteria.
+Verbifrost is a systems project to bring RDMA/RoCEv2 to macOS for
+heterogeneous AI clusters (Mac ↔ DGX Spark).
+
+> **⚠️ Major revision (2026-07-23):** Phase 0 research discovered that macOS
+> already has a complete RDMA stack (`librdma.dylib` + `IORDMAFamily.kext`).
+> The project scope has been reduced from ~2 years to ~4-6 months. See
+> [docs/research/librdma-discovery.md](docs/research/librdma-discovery.md).
 
 ---
 
-## Phase 0: Research & Reconnaissance *(current)*
+## Phase 0: Research & Reconnaissance *(current — nearly complete)*
 
-**Goal:** Document everything about the target environment before writing code.
+**Goal:** Document everything about macOS's hidden RDMA stack.
 
-**Deliverables:**
-- [x] Document the 4-layer RDMA gap on macOS (see [ARCHITECTURE.md](ARCHITECTURE.md))
-- [x] Reverse-engineer Apple's `DriverKit-AppleEthernetMLX5` driver — what it
-      initializes, what it leaves dormant (see
-      [docs/research/mlx5-driver-analysis.md](docs/research/mlx5-driver-analysis.md))
-- [x] Map Apple's private `AppleThunderboltRDMAPeerInterface` — the
-      undocumented RDMA path that MLX's jaccl uses
-      (see [docs/research/apple-private-rdma.md](docs/research/apple-private-rdma.md))
-- [ ] Map the DriverKit networking stack (`IOSkywalkFamily`, `IOUserNetworkEthernet`)
-- [ ] Document the mlx5 command interface (mailbox, HCA commands, init sequence)
-- [ ] Identify which DriverKit entitlements Apple requires for DMA / PCI config access
-- [ ] Test: can we read mlx5 PCI config space and VPD from userspace on macOS?
+**Completed:**
+- [x] Discovered `librdma.dylib` — macOS's hidden `libibverbs` (dyld shared cache)
+- [x] Verified `ibv_*` API works live (6 RDMA devices enumerated)
+- [x] Found `infiniband/verbs.h` in macOS SDK (1504 lines, standard API)
+- [x] Discovered `IORDMAFamily.kext` — kernel RDMA framework
+- [x] Discovered `AppleThunderboltRDMA.kext` — Thunderbolt RDMA provider
+- [x] Documented mlx5 dext's hidden RDMA command set (120+ HCA commands)
+- [x] Mapped provider registration protocol (IOKit properties)
+- [x] Built `vfinfo` tool — first working Verbifrost code
 
-**Success:** Anyone joining the project can understand the full stack from
-the docs alone.
-
----
-
-## Phase 1: DriverKit RDMA Transport Skeleton
-
-**Goal:** A DriverKit dext that registers a character device and accepts
-verbs ioctls — no hardware yet.
-
-**Deliverables:**
-- [ ] DriverKit dext project skeleton (Xcode, entitlements, provisioning)
-- [ ] PCI matching personality for `vendor_id=0x15b3` (Mellanox)
-- [ ] `/dev/verbifrost/uverbs0` character device exposed to userspace
-- [ ] ioctl ABI definition for MR/QP/CQ operations
-- [ ] Internal data structures for tracking objects (MR, QP, CQ, PD, AH)
-- [ ] Basic test: open device, query capabilities, close
-
-**Dependencies:** Phase 0 research on DriverKit entitlements and IOKit
-service registration.
-
-**Success:** `vfinfo` (our `ibv_devices` equivalent) lists the ConnectX card
-as an RDMA device.
+**Remaining:**
+- [ ] Extract and disassemble `IORDMAFamily.kext` to find provider C++ interface
+- [ ] Determine what virtual methods `IORDMAFamilyUC` dispatches to providers
+- [ ] Investigate `com.apple.private.iokit.rdma` entitlement requirements
+- [ ] Study how `AppleThunderboltRDMA` implements the provider interface
 
 ---
 
-## Phase 2: ConnectX Verbs Provider
+## Phase 1: ConnectX Provider Dext
 
-**Goal:** The dext can actually drive the mlx5 hardware — initialize the RDMA
-engine, create queue pairs, register memory, and perform RDMA writes/reads.
+**Goal:** A DriverKit dext that initializes the ConnectX RDMA engine and
+registers as an IORDMAFamily provider.
 
 **Deliverables:**
-- [ ] mlx5 initialization sequence (HCA reset, boot, firmware load)
-- [ ] Command queue (CMD_IF) implementation — mailbox-based HCA commands
-- [ ] RoCEv2 firmware configuration (set port parameters, enable RoCE)
+- [ ] Reverse-engineer the IORDMAFamily provider C++ interface
+- [ ] DriverKit dext skeleton (Xcode project, entitlements, provisioning)
+- [ ] PCI device matching for ConnectX (vendor 0x15b3)
+- [ ] HCA initialization: `ENABLE_HCA` → `INIT_HCA` → `SET_ROCE_ADDRESS`
+- [ ] Create IOKit service node with IORDMAFamily properties
+- [ ] `vfinfo` lists ConnectX as an RDMA device
+
+**Dependencies:** Phase 0 provider interface RE.
+
+---
+
+## Phase 2: Verbs Implementation
+
+**Goal:** The provider dext implements all verbs operations via IORDMAFamily.
+
+**Deliverables:**
 - [ ] Protection Domain (PD) allocation
 - [ ] Memory Registration (MR) — DMA-map userspace buffers
 - [ ] Completion Queue (CQ) creation and polling
-- [ ] Queue Pair (QP): RST → INIT → RTR → RTS state machine
-- [ ] Address Handle (AH) creation for RoCEv2 (GID, GID index, UDP port)
-- [ ] Post Send / Post Recv verbs
-- [ ] End-to-end test: RDMA WRITE between two Mac Studios over 25GbE
+- [ ] Queue Pair (QP) state machine (RST → INIT → RTR → RTS)
+- [ ] Address Handle (AH) creation for RoCEv2
+- [ ] Post Send / Post Recv (data path)
+- [ ] End-to-end: RDMA WRITE between Mac and DGX Spark over RoCEv2
 
-**Dependencies:** Phase 1 dext skeleton; physical ConnectX hardware on macOS.
-
-**Success:** `vf_ping` achieves sub-5µs round-trip latency between two Mac
-Studios connected via SFP28 DAC.
+**Dependencies:** Phase 1 dext + `com.apple.private.iokit.rdma` entitlement.
 
 ---
 
-## Phase 3: Userspace Verbs Library
+## Phase 3: Integration
 
-**Goal:** A drop-in `libibverbs` / `librdmacm` port that lets existing RDMA
-software run on macOS.
+**Goal:** Real heterogeneous inference.
 
 **Deliverables:**
-- [ ] `libverbifrost` — the verbs provider that calls the dext via ioctl
-- [ ] Port of `libibverbs` core (context, PD, MR, CQ, QP, AH, SRQ APIs)
-- [ ] Port of `librdmacm` (connection manager, RDMA CM ID, address resolution)
-- [ ] RoCEv2 GID table management
-- [ ] Compatible header files (`<infiniband/verbs.h>`, `<rdma/rdma_cma.h>`)
-- [ ] Test: compile and run `rdma-core` example programs unmodified
-
-**Dependencies:** Phase 2 hardware driver.
-
-**Success:** Any application that uses `libibverbs` on Linux compiles and
-runs on macOS against `libverbifrost` with no source changes.
+- [ ] MLX distributed backend using standard verbs (replaces TCP ring)
+- [ ] exo integration: Mac↔Spark RDMA pipeline parallelism
+- [ ] Performance benchmarks vs TCP ring
+- [ ] Multi-node testing on the real cluster
 
 ---
 
-## Phase 4: Integration & Real-World Use
+## Timeline (revised)
 
-**Goal:** Verbifrost is used for actual heterogeneous AI inference.
-
-**Deliverables:**
-- [ ] New MLX distributed backend (`verbifrost`) that uses standard verbs
-- [ ] exo integration: Mac↔Spark RDMA inference over RoCEv2
-- [ ] NCCL compatibility study (can Mac join an NCCL communicator?)
-- [ ] Performance benchmarks: RDMA vs TCP ring on the same hardware
-- [ ] Multi-node CI test with Mellanox cards
-
-**Dependencies:** Phases 1–3 complete and stable.
-
-**Success:** A DeepSeek-V3 model runs with pipeline parallelism across
-Mac Studios and DGX Sparks using RoCEv2 RDMA for the cross-island link,
-achieving >2× the throughput of the TCP ring backend.
-
----
-
-## Timeline estimate
-
-This is a multi-year effort. Realistic rough estimates:
-
-| Phase | Duration | Parallelizable? |
-|-------|----------|----------------|
-| 0 | 2–3 months (ongoing) | Yes — many independent research threads |
-| 1 | 3–6 months | Partially — dext skeleton can start now |
-| 2 | 6–12 months | No — sequential hardware bring-up |
-| 3 | 3–6 months | Yes — can overlap with Phase 2 |
-| 4 | 3–6 months | Yes — multiple integration targets |
-
-These assume 2–3 active contributors. The critical path is Phase 2 (mlx5
-verbs provider), which requires deep expertise in both mlx5 firmware and
-DriverKit DMA APIs.
+| Phase | Duration | Notes |
+|-------|----------|-------|
+| 0 | 1 month more | Provider interface RE is the key remaining item |
+| 1 | 2-3 months | DriverKit dext + HCA init |
+| 2 | 2-3 months | Verbs implementation + first RDMA transfer |
+| 3 | 1-2 months | MLX/exo integration + benchmarks |
+| **Total** | **~6-9 months** | (down from original ~2 years) |
