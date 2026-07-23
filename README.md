@@ -57,13 +57,14 @@ significantly reduce the project's scope:
 
 2. **Apple has a private RDMA framework (`IORDMAFamily`)** with a userspace
    UserClient (`IORDMAFamilyUC`). This is Apple's equivalent of Linux's
-   `ib_core` + uverbs. It's undocumented but already active on Thunderbolt
-   RDMA interfaces. See
+   `ib_core` + uverbs. It's currently Thunderbolt-only, but if the verbs
+   layer is transport-agnostic, it could be reused for RoCEv2. See
    [docs/research/iordma-family-discovery.md](docs/research/iordma-family-discovery.md).
 
-These findings mean we may not need to build the entire RDMA stack from
-scratch — Apple has already built most of it. Our task may be to *expose*
-what Apple has hidden, rather than *reimplement* it.
+> **Note:** Mac↔Mac RDMA already works today via Apple's jaccl backend.
+> The goal of Verbifrost is **Mac↔DGX Spark RDMA over Ethernet/RoCEv2** —
+> bridging the heterogeneous gap. The IORDMAFamily discovery is valuable
+> only if it can be extended to non-Thunderbolt transports.
 
 ## Who we need
 

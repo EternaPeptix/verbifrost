@@ -73,43 +73,38 @@ com.apple.iokit.IONetworkingFamily    3.4
 com.apple.iokit.IOPCIFamily           2.0
 ```
 
-## Implications for Verbifrost
+## Implications for Verbifrost (Mac↔Spark RDMA)
 
-This discovery fundamentally changes the project strategy — two new viable
-paths exist:
+> **Goal reminder:** Mac↔Mac RDMA already works via Apple's jaccl backend.
+> Verbifrost exists to enable **Mac↔DGX Spark RDMA over Ethernet/RoCEv2**.
 
-### Path A: Fork Apple's mlx5 dext (original plan)
+The IORDMAFamily discovery is relevant to our goal **only if** the framework
+is transport-agnostic — i.e., if we can write a provider that registers a
+ConnectX/RoCEv2 device, and the existing `IORDMAFamilyUC` would then give
+us verbs that produce standard RoCEv2 packets interoperable with Linux.
 
-Write a new DriverKit dext that claims the Mellanox PCI device and exposes
-RDMA via a new `IOUserClient`. Reuses the mlx5 command code Apple compiled
-into their dext.
+### Path A: Fork Apple's mlx5 dext (most direct path to Mac↔Spark)
 
-### Path B: Use IORDMAFamily directly ⭐ NEW
+Write a new DriverKit dext that claims the ConnectX card, issues the
+`SET_ROCE_ADDRESS` / `CREATE_QP` / `CREATE_CQ` commands (which Apple's dext
+already contains) to initialize RoCEv2, and exposes verbs via our own
+UserClient. The RoCEv2 packets flow over 25GbE Ethernet to the Spark's
+ConnectX-7 — fully interoperable because both speak standard RoCEv2.
 
-Since `IORDMAFamily` already provides `IORDMAFamilyUC`, we may write an
-`IORDMAFamily` *provider* dext for the ConnectX card (like
-`AppleThunderboltRDMA` does for Thunderbolt). The existing `IORDMAFamilyUC`
-would then provide verbs access. Much less work than Path A — we'd implement
-a hardware adapter, not the entire RDMA stack.
+**This is the surest path to Mac↔Spark.** It doesn't depend on IORDMAFamily.
 
-**However:** `IORDMAFamily` is private. We'd need to reverse-engineer its
-C++ ABI and determine if it's transport-agnostic.
+### Path B: Write an IORDMAFamily provider for ConnectX (shortcut, IF possible)
 
-### Path C: Call IORDMAFamilyUC from userspace ⭐ NEW
+If `IORDMAFamily` is transport-agnostic (not Thunderbolt-coupled at the verbs
+layer), we write a provider dext that registers the ConnectX card. The
+existing `IORDMAFamilyUC` would then provide RoCEv2 verbs. Less code than
+Path A, but depends on an unknown: does IORDMAFamily accept non-TB providers?
 
-`IORDMAFamilyUC` is already attached to live Thunderbolt RDMA interfaces. We
-can call it directly via `IOServiceOpen` + `IOConnectCallMethod`:
+### Path C: Call IORDMAFamilyUC from userspace (Mac↔Mac only — NOT our goal)
 
-```c
-io_service_t service = IOServiceGetMatchingService(kIOMasterPortDefault,
-    IOServiceMatching("AppleThunderboltRDMAInterface"));
-io_connect_t conn;
-IOServiceOpen(service, mach_task_self(), 0, &conn);
-IOConnectCallMethod(conn, selector, ...);  // verbs calls!
-```
-
-This gives immediate RDMA access over Thunderbolt (Mac↔Mac) without kernel
-code. Then extend the pattern to Mellanox hardware via a provider dext.
+`IORDMAFamilyUC` is attached to Thunderbolt RDMA interfaces. Calling it
+directly gives Mac↔Mac RDMA — **which jaccl already does**. This path does
+not serve the Mac↔Spark goal and is listed only for completeness.
 
 ## Next steps
 
