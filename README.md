@@ -45,11 +45,25 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full design and
 
 ## Status
 
-**Phase 0 — Research & Reconnaissance**
+**Phase 0 — Research & Reconnaissance** (in progress, major findings)
 
-No code yet. We're documenting the target hardware, reverse-engineering
-Apple's private RDMA interface, and mapping the DriverKit networking stack.
-See [docs/research/](docs/research/) for findings.
+No code yet, but research has uncovered two critical discoveries that
+significantly reduce the project's scope:
+
+1. **Apple's mlx5 dext contains the complete RDMA command set** — all QP,
+   CQ, PD, MR, and RoCEv2 address management commands are compiled into
+   `DriverKit-AppleEthernetMLX5.dext` but never exposed. See
+   [docs/research/mlx5-driver-analysis.md](docs/research/mlx5-driver-analysis.md).
+
+2. **Apple has a private RDMA framework (`IORDMAFamily`)** with a userspace
+   UserClient (`IORDMAFamilyUC`). This is Apple's equivalent of Linux's
+   `ib_core` + uverbs. It's undocumented but already active on Thunderbolt
+   RDMA interfaces. See
+   [docs/research/iordma-family-discovery.md](docs/research/iordma-family-discovery.md).
+
+These findings mean we may not need to build the entire RDMA stack from
+scratch — Apple has already built most of it. Our task may be to *expose*
+what Apple has hidden, rather than *reimplement* it.
 
 ## Who we need
 
