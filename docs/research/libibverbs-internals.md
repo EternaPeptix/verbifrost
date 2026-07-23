@@ -68,6 +68,30 @@ Functions at `0x028af0xxxx` are real implementations. Functions at
 | `ibv_create_qp` | ❌ NULL | Needs `com.apple.private.iokit.rdma` entitlement |
 | `ibv_reg_mr` | ❌ errno -22 | Same entitlement requirement |
 
+## Communication mechanism (confirmed)
+
+`libibverbs.dylib` communicates with the kernel via an **opaque IOKit channel**,
+not via standard Unix ioctls or `/dev/` device files:
+
+1. `ibv_open_device` calls `IOServiceOpen` → gets an `io_connect_t` handle
+2. This handle is stored in `ctx->cmd_fd` (misleadingly named — not a Unix fd)
+3. The ops functions (alloc_pd, create_qp, post_send, etc.) call internal
+   dispatch routines that use this handle
+
+**Key finding:** Standard `IOConnectCallScalarMethod`,
+`IOConnectCallStructMethod`, and `IOConnectMapMemory` all return
+`kIOReturnUnsupported` when called directly on the handle. This means
+`libibverbs.dylib` uses a **non-standard IOKit dispatch path** — likely
+direct `mach_msg` calls or a private IOKit trap mechanism.
+
+This needs `lldb` or `DTrace` to fully trace (running locally on the Mac,
+not through SSH). The exact protocol details are deferred to Phase 1 RE.
+
+## No librdmacm
+
+`librdmacm.dylib` (RDMA Connection Manager) is **not available** on macOS.
+Connection management is handled internally by the IORDMAFamily framework.
+
 ## No provider plugin mechanism
 
 Unlike Linux's libibverbs (which `dlopen`s provider libraries from
@@ -75,31 +99,3 @@ Unlike Linux's libibverbs (which `dlopen`s provider libraries from
 The provider registration happens at the kernel level via IOKit properties,
 not via userspace library loading.
 
-## No librdmacm
-
-`librdmacm.dylib` (RDMA Connection Manager) is **not available** on macOS.
-Connection management is handled internally by the IORDMAFamily framework.
-
-## Communication mechanism (hypothesis)
-
-```
-Application calls ibv_post_send(qp, wr, &bad_wr)
-    ↓ (static inline in verbs.h)
-qp->context->ops.post_send(qp, wr, &bad_wr)
-    ↓ (function at 0x028af09b50)
-IOConnectCallStructMethod(ctx->cmd_fd, selector, input_struct, ...)
-    ↓ (mach IPC)
-IORDMAFamilyUC (kernel UserClient)
-    ↓
-IORDMAFamily.kext dispatches to provider
-    ↓
-AppleThunderboltRDMAInterface (Thunderbolt RDMA provider)
-```
-
-The `cmd_fd` field holds the `io_connect_t` handle from `IOServiceOpen`.
-The ops functions (post_send, poll_cq, etc.) internally call
-`IOConnectCallStructMethod` or `IOConnectCallScalarMethod` using this handle.
-
-**Next step:** Disassemble `post_send` (0x028af09b50) to confirm it calls
-`IOConnectCallStructMethod` and determine the selector numbers and struct
-layouts used for each verb.
