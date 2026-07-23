@@ -55,7 +55,55 @@ listed** — because no IORDMAFamily provider exists for it.
 | `ibv_reg_mr` | Memory Region registration | ✅ (jaccl uses it) |
 | `ibv_query_port` | Query port state | ✅ (jaccl uses it) |
 | `ibv_query_gid` | Query GID table | ✅ (jaccl uses it) |
-| `ibv_post_send` / `post_recv` / `poll_cq` | Data path | ⚠️ Not loaded by jaccl |
+| `ibv_post_send` / `post_recv` / `poll_cq` | Data path | ✅ **Inline dispatchers** |
+
+## `infiniband/verbs.h` — Apple ships the standard header
+
+**1504 lines**, copyright "Apple, Inc. (2025)" based on the upstream
+libibverbs code. Located at:
+```
+$(xcrun --show-sdk-path)/usr/include/infiniband/verbs.h
+```
+
+The data-path functions I initially reported as "missing" are **static
+inline dispatchers** — identical to Linux's libibverbs design:
+
+```c
+// line 1332 — poll_cq dispatches through the ops table
+static inline int ibv_poll_cq(struct ibv_cq *cq, int num_entries,
+                               struct ibv_wc *wc)
+{
+    return cq->context->ops.poll_cq(cq, num_entries, wc);
+}
+
+// line 1425 — post_send dispatches through the ops table
+static inline int ibv_post_send(struct ibv_qp *qp, struct ibv_send_wr *wr,
+                                 struct ibv_send_wr **bad_wr)
+{
+    return qp->context->ops.post_send(qp, wr, bad_wr);
+}
+
+// line 1434 — post_recv dispatches through the ops table
+static inline int ibv_post_recv(struct ibv_qp *qp, struct ibv_recv_wr *wr,
+                                 struct ibv_recv_wr **bad_wr)
+{
+    return qp->context->ops.post_recv(qp, wr, bad_wr);
+}
+```
+
+The `ibv_context_ops` struct (line 932) defines the complete function
+pointer table — `poll_cq`, `post_send`, `post_recv`, `req_notify_cq`, and
+40+ other verbs operations. When `ibv_open_device` is called, the RDMA
+provider fills in these function pointers.
+
+**This means the COMPLETE standard RDMA API is available on macOS — both
+control path (ibv_get_device_list, ibv_create_qp, ibv_reg_mr) and data path
+(ibv_post_send, ibv_post_recv, ibv_poll_cq). Any application that includes
+`<infiniband/verbs.h>` and links against `librdma.dylib` gets full RDMA.**
+
+The "missing 4 symbols" from the earlier ctypes probe were a false alarm —
+they're `static inline` in the header, not exported symbols in the .dylib.
+This is exactly how Linux's libibverbs works too.
 
 ## Where it lives
 
