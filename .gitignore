@@ -1,0 +1,29 @@
+# Build artifacts
+build/
+*.o
+*.obj
+*.dylib
+*.a
+*.so
+
+# DriverKit
+*.dext
+DerivedData/
+*.xcodeproj/xcuserdata/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Python (for tooling scripts)
+__pycache__/
+*.pyc
+.venv/

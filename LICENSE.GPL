@@ -1,0 +1,13 @@
+Verbifrost — DriverKit Kernel Components License
+
+The DriverKit dext and kernel-side components in the kernel/ directory are
+licensed under the GNU General Public License version 2 (GPL-2.0).
+
+This matches the licensing of Linux's ib_core.ko and mlx5_ib.ko, from which
+we derive architectural concepts and may reuse command structures.
+
+The full GPL-2.0 text is available at:
+https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt
+
+If you need the full text bundled, run:
+  curl -sL https://www.gnu.org/licenses/old-licenses/gpl-2.0.txt > kernel/COPYING
