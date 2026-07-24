@@ -10,25 +10,28 @@ heterogeneous AI clusters (Mac ↔ DGX Spark).
 
 ---
 
-## Phase 0: Research & Reconnaissance *(current — nearly complete)*
+## Phase 0: Research & Reconnaissance *(COMPLETE ✅)*
 
 **Goal:** Document everything about macOS's hidden RDMA stack.
 
-**Completed:**
-- [x] Discovered `librdma.dylib` — macOS's hidden `libibverbs` (dyld shared cache)
-- [x] Verified `ibv_*` API works live (6 RDMA devices enumerated)
+**All deliverables completed:**
+- [x] Discovered `librdma.dylib` / `libibverbs.dylib` — full libibverbs in dyld cache
+- [x] Verified `ibv_*` API works live (6 RDMA devices enumerated, PD/CQ creation)
 - [x] Found `infiniband/verbs.h` in macOS SDK (1504 lines, standard API)
 - [x] Discovered `IORDMAFamily.kext` — kernel RDMA framework
-- [x] Discovered `AppleThunderboltRDMA.kext` — Thunderbolt RDMA provider
-- [x] Documented mlx5 dext's hidden RDMA command set (120+ HCA commands)
+- [x] **Extracted kext binaries from kernelcache** — confirmed it's a Linux RDMA port
+- [x] **Identified provider interface**: `IORDMAInterface` = Linux `ib_device_ops`
+- [x] **Found `ib_register_device`** in the binary — provider registration works like Linux
+- [x] Documented mlx5 dext's hidden RDMA command set
 - [x] Mapped provider registration protocol (IOKit properties)
 - [x] Built `vfinfo` tool — first working Verbifrost code
+- [x] Traced libibverbs call chain to kernel IPC
+- [x] Built kext extraction tooling (extract_kexts2.py with pyimg4)
 
-**Remaining:**
-- [ ] Extract and disassemble `IORDMAFamily.kext` to find provider C++ interface
-- [ ] Determine what virtual methods `IORDMAFamilyUC` dispatches to providers
-- [ ] Investigate `com.apple.private.iokit.rdma` entitlement requirements
-- [ ] Study how `AppleThunderboltRDMA` implements the provider interface
+**Key finding:** IORDMAFamily.kext is Apple's port of the Linux kernel's
+`drivers/infiniband/core/`. The provider interface is the same `ib_device_ops`
+struct. A ConnectX provider is just an mlx5_ib port that calls
+`ib_register_device`.
 
 ---
 
