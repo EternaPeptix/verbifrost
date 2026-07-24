@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>${EXECUTABLE_NAME}</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>KEXT</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>OSBundleCompatibleVersion</key>
+    <string>1.0.0</string>
+    <key>OSBundleLibraries</key>
+    <dict>
+        <!-- Core kernel/IOKit -->
+        <key>com.apple.kpi.libkern</key>
+        <string>18.0</string>
+        <key>com.apple.kpi.iokit</key>
+        <string>18.0</string>
+        <key>com.apple.kpi.bsd</key>
+        <string>18.0</string>
+        <key>com.apple.kpi.mach</key>
+        <string>18.0</string>
+        <key>com.apple.iokit.IOPCIFamily</key>
+        <string>2.9</string>
+        <key>com.apple.iokit.IOACPIFamily</key>
+        <string>1.0.0d1</string>
+        <!-- IORDMAFamily — the RDMA core (Phase 1: comment out until headers reconstructed) -->
+        <!-- <key>com.apple.iokit.IORDMAFamily</key> -->
+        <!-- <string>1.0</string> -->
+    </dict>
+    <key>OSBundleRequired</key>
+    <string>Root</string>
+    <key>IOKitPersonalities</key>
+    <dict>
+        <!-- Primary personality: match ConnectX-6 LX (vendor=0x15b3, device=0x1015) -->
+        <key>VerbifrostConnectX6LX</key>
+        <dict>
+            <key>IOClass</key>
+            <string>VerbifrostConnectXRDMA</string>
+            <key>IOProviderClass</key>
+            <string>IOPCIDevice</string>
+            <!-- Match vendor=0x15b3, device=0x1015 (ConnectX-6 LX) -->
+            <key>IOPCIMatch</key>
+            <string>0x101515b3</string>
+            <!-- Higher probe score than Apple's dext (1000) -->
+            <key>IOProbeScore</key>
+            <integer>5000</integer>
+            <key>IOPCITunnelCompatible</key>
+            <true/>
+            <key>IOPropertyMatch</key>
+            <dict>
+                <key>IOPCIClassMatch</key>
+                <string>0x02000000&amp;0xffffff00</string>
+            </dict>
+        </dict>
+        <!-- Match any ConnectX-6/7 (for future hardware) -->
+        <key>VerbifrostConnectXGeneric</key>
+        <dict>
+            <key>IOClass</key>
+            <string>VerbifrostConnectXRDMA</string>
+            <key>IOProviderClass</key>
+            <string>IOPCIDevice</string>
+            <!-- Match vendor=0x15b3, any device (mask lower 16 bits) -->
+            <key>IOPCIMatch</key>
+            <string>0x000015b3&amp;0x0000ffff</string>
+            <key>IOProbeScore</key>
+            <integer>4000</integer>
+            <key>IOPCITunnelCompatible</key>
+            <true/>
+        </dict>
+    </dict>
+    <!-- OSBundleAllowUserPrintf for debug builds -->
+    <key>OSBundleAllowUserLand</key>
+    <true/>
+</dict>
+</plist>
