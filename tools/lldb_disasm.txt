@@ -1,0 +1,38 @@
+-- lldb_disasm.txt
+-- LLDB script to disassemble libibverbs ops functions.
+-- Run: lldb -s lldb_disasm.txt /tmp/dump_ops
+--
+-- This sets a breakpoint at ibv_alloc_pd, runs the program, then
+-- disassembles the ops table functions from the live context.
+
+b ibv_alloc_pd
+run
+
+-- After the breakpoint hits, the ibv_context is available.
+-- We need to find the active device context. Let's use a different approach:
+-- break in main() right after ibv_open_device and walk the ops table.
+
+-- Actually, simplest: just disassemble at the known function addresses
+-- that we captured from dump_ops. These are stable across runs in the
+-- same dyld cache version.
+
+-- The ops functions from dump_ops output:
+image lookup --address 0x28af081c4
+image lookup --address 0x28af08300
+image lookup --address 0x28af07e80
+image lookup --address 0x28af076e0
+image lookup --address 0x28af079b4
+image lookup --address 0x28af083dc
+image lookup --address 0x28af09b50
+image lookup --address 0x28af098c4
+
+-- Disassemble alloc_pd (256 bytes)
+disassemble --start-address 0x28af081c4 --count 40
+
+-- Disassemble poll_cq (256 bytes)
+disassemble --start-address 0x28af079b4 --count 40
+
+-- Disassemble post_send (256 bytes)
+disassemble --start-address 0x28af09b50 --count 40
+
+quit
