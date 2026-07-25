@@ -62,6 +62,9 @@ private:
     IOReturn waitForInitializing(void);
     IOReturn initCmdQueue(void);
     IOReturn sendEnableHCA(void);
+    IOReturn queryHcaCap(void);
+    IOReturn queryPages(uint16_t type, int16_t *pages_needed);
+    IOReturn initHca(void);
 
 public:
     virtual bool start(IOService *provider) override;
@@ -154,6 +157,30 @@ bool VerbifrostConnectXRDMA::initHardware(void)
     ret = sendEnableHCA();
     if (ret != kIOReturnSuccess) { VF_ERROR("ENABLE_HCA failed"); return false; }
     VF_LOG("ENABLE_HCA succeeded — HCA is active!");
+
+    /* Query boot pages that firmware needs */
+    int16_t boot_pages = 0;
+    ret = queryPages(1, &boot_pages);  /* type=1 = boot pages */
+    if (ret != kIOReturnSuccess) {
+        VF_ERROR("QUERY_PAGES failed");
+        return false;
+    }
+    VF_LOG("Firmware needs %d boot pages", boot_pages);
+
+    /* Query device capabilities */
+    ret = queryHcaCap();
+    if (ret != kIOReturnSuccess) {
+        VF_ERROR("QUERY_HCA_CAP failed");
+        return false;
+    }
+
+    /* Initialize the HCA */
+    ret = initHca();
+    if (ret != kIOReturnSuccess) {
+        VF_ERROR("INIT_HCA failed");
+        return false;
+    }
+    VF_LOG("HCA fully initialized!");
 
     return true;
 }
@@ -275,8 +302,134 @@ IOReturn VerbifrostConnectXRDMA::sendEnableHCA(void)
 }
 
 /* ============================================================
- * Cleanup
+ * queryPages — QUERY_PAGES command (opcode 0x107)
+ * Asks the firmware how many pages it needs (boot/init).
  * ============================================================ */
+
+IOReturn VerbifrostConnectXRDMA::queryPages(uint16_t type, int16_t *pages_needed)
+{
+    /* QUERY_PAGES input:
+     *   offset 0: opcode = 0x107
+     *   offset 6: op_mod = type (1=boot, 2=init, 3=regular)
+     *
+     * QUERY_PAGES output:
+     *   offset 0: status
+     *   offset 8: num_pages (signed 16-bit, big-endian)
+     */
+    uint8_t out_buf[16] = {0};
+    uint8_t fw_status = 0xFF;
+
+    IOReturn ret = mlx5_cmd_exec(&fCmdCtx,
+                                 MLX5_CMD_OP_QUERY_PAGES, type,
+                                 NULL, 0,
+                                 out_buf, sizeof(out_buf),
+                                 &fw_status);
+
+    if (ret == kIOReturnSuccess) {
+        *pages_needed = (int16_t)OSSwapInt16(*(uint16_t *)(out_buf + 8));
+    }
+
+    return ret;
+}
+
+/* ============================================================
+ * queryHcaCap — QUERY_HCA_CAP (opcode 0x100)
+ * Reads device capabilities (max QPs, max CQs, port types, etc.)
+ * ============================================================ */
+
+IOReturn VerbifrostConnectXRDMA::queryHcaCap(void)
+{
+    /* QUERY_HCA_CAP input:
+     *   offset 0: opcode = 0x100
+     *   offset 6: op_mod = capability type
+     *     bits [1:0] = cap group (0=general, 1=eth offload, 2=odp, 3=atomic)
+     *     bit 2 = 0 (query current), 1 (query max)
+     *
+     * QUERY_HCA_CAP output:
+     *   offset 0:  status (8-bit)
+     *   offset 8:  capability struct (cmd_hca_cap, ~1000 bytes)
+     */
+
+    /* Query general capabilities (cap group 0) */
+    uint8_t out_buf[1024] = {0};
+    uint8_t fw_status = 0xFF;
+
+    IOReturn ret = mlx5_cmd_exec(&fCmdCtx,
+                                 MLX5_CMD_OP_QUERY_HCA_CAP, 0x00,
+                                 NULL, 0,
+                                 out_buf, sizeof(out_buf),
+                                 &fw_status);
+
+    if (ret != kIOReturnSuccess) {
+        VF_LOG("QUERY_HCA_CAP failed: fw_status=0x%02x", fw_status);
+        return ret;
+    }
+
+    /* Parse key capabilities from the response.
+     * The capability struct starts at offset 8 in the output mailbox.
+     * Key fields (from mlx5_ifc cmd_hca_cap, all big-endian bitfields):
+     *   offset 8+0x00: log_max_qp (bits [5:0] of byte at +0x18)
+     *   offset 8+0x01: num_ports (bits [2:0] of byte at +0x61)
+     *   offset 8+0x02: log_max_cq
+     *   offset 8+0x03: log_max_mkey
+     */
+
+    /* The capability is a bitfield struct. Key offsets:
+     * num_ports: offset 0x61 bits [2:0]
+     * log_max_qp: offset 0x18 bits [5:0]
+     * log_max_cq: offset 0x98 bits [4:0]
+     */
+    uint8_t *cap = out_buf + 8;  /* skip mbox header */
+
+    /* num_ports (offset 0x61, low 3 bits) */
+    uint8_t num_ports = cap[0x61] & 0x7;
+
+    /* log_max_qp (offset 0x18, low 6 bits) */
+    uint8_t log_max_qp = cap[0x18] & 0x3F;
+
+    VF_LOG("HCA Capabilities: ports=%d, max_qp=%d (%d QPs)",
+           num_ports, log_max_qp, 1 << log_max_qp);
+
+    /* Store as IORegistry properties for userspace visibility */
+    setProperty("HCANumPorts", num_ports, 8);
+    setProperty("HCALogMaxQP", log_max_qp, 8);
+    setProperty("HCAMaxQPs", 1 << log_max_qp, 32);
+
+    return kIOReturnSuccess;
+}
+
+/* ============================================================
+ * initHca — INIT_HCA (opcode 0x103)
+ * Initializes HCA internal resources. For Phase 1 we send a
+ * minimal INIT_HCA (defaults).
+ * ============================================================ */
+
+IOReturn VerbifrostConnectXRDMA::initHca(void)
+{
+    /* INIT_HCA input:
+     *   offset 0: opcode = 0x103
+     *   offset 6: op_mod = 0
+     *   offset 8+: init_hca_in struct (can be mostly zeros for defaults)
+     *
+     * INIT_HCA output:
+     *   offset 0: status
+     */
+    uint8_t in_buf[512]  = {0};
+    uint8_t out_buf[16]  = {0};
+    uint8_t fw_status = 0xFF;
+
+    IOReturn ret = mlx5_cmd_exec(&fCmdCtx,
+                                 MLX5_CMD_OP_INIT_HCA, 0,
+                                 in_buf + 16, sizeof(in_buf) - 16,
+                                 out_buf, sizeof(out_buf),
+                                 &fw_status);
+
+    if (ret == kIOReturnSuccess) {
+        VF_LOG("INIT_HCA succeeded");
+    }
+
+    return ret;
+}
 
 void VerbifrostConnectXRDMA::freeHardware(void)
 {
