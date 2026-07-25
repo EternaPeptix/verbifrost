@@ -35,20 +35,31 @@ struct. A ConnectX provider is just an mlx5_ib port that calls
 
 ---
 
-## Phase 1: ConnectX Provider Dext
+## Phase 1: ConnectX Provider Kext *(in progress — ~70%)*
 
-**Goal:** A DriverKit dext that initializes the ConnectX RDMA engine and
+**Goal:** A kernel extension that initializes the ConnectX RDMA engine and
 registers as an IORDMAFamily provider.
 
-**Deliverables:**
-- [ ] Reverse-engineer the IORDMAFamily provider C++ interface
-- [ ] DriverKit dext skeleton (Xcode project, entitlements, provisioning)
-- [ ] PCI device matching for ConnectX (vendor 0x15b3)
-- [ ] HCA initialization: `ENABLE_HCA` → `INIT_HCA` → `SET_ROCE_ADDRESS`
-- [ ] Create IOKit service node with IORDMAFamily properties
-- [ ] `vfinfo` lists ConnectX as an RDMA device
+**Completed:**
+- [x] Reverse-engineer the IORDMAFamily provider interface → 628 symbols extracted
+- [x] Kext skeleton (Makefile, Info.plist, IOService subclass)
+- [x] PCI device matching for ConnectX (`pci15b3,1015`, IOProbeScore=5000)
+- [x] BAR0 mapping + init segment readback
+- [x] mlx5 command queue (DMA ring + mailbox pool + polling execution)
+- [x] ENABLE_HCA command
+- [x] QUERY_PAGES command
+- [x] QUERY_HCA_CAP command (parses max QPs, port count)
+- [x] INIT_HCA command
+- [x] Reconstruct kernel-side `ib_verbs.h` (ib_device, ib_device_ops, ib_pd/cq/qp/mr)
+- [x] Reconstruct `IORDMAInterface.h` C++ class header
 
-**Dependencies:** Phase 0 provider interface RE.
+**Remaining:**
+- [ ] **Load kext on 512S2** with SIP disabled (validate PCI + BAR0 + commands)
+- [ ] Create EQ (Event Queue) for interrupt-driven completions
+- [ ] Link against `com.apple.iokit.IORDMAFamily` in Info.plist
+- [ ] `vfinfo` lists ConnectX as RDMA device
+
+**Dependencies:** None (SIP must be disabled for loading)
 
 ---
 
