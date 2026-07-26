@@ -25,7 +25,7 @@ KEXT_DIR     = $(BUILD_DIR)/$(KEXT_NAME).kext
 CONTENTS_DIR = $(KEXT_DIR)/Contents
 
 # Sources
-SRCS = VerbifrostConnectXRDMA.cpp mlx5_cmd.cpp mlx5_verbs.cpp
+SRCS = VerbifrostConnectXRDMA.cpp mlx5_cmd.cpp mlx5_verbs.cpp mlx5_qp.cpp mlx5_mr.cpp
 
 # Flags
 CFLAGS = -arch $(ARCH) \
