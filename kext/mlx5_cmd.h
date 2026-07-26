@@ -3,6 +3,8 @@
 
 #include "mlx5_registers.h"
 #include <stdint.h>
+#include <IOKit/IOLib.h>
+#include <IOKit/IOBufferMemoryDescriptor.h>
 
 /* ============================================================
  * mlx5_cmd_prot_block — Command ring entry (64 bytes)

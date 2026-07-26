@@ -78,3 +78,4 @@
 #define MLX5_DEV_CX7     0x1021
 
 #endif /* MLX5_REGISTERS_H */
+#define MLX5_CMD_OP_DESTROY_MKEY  0x201

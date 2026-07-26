@@ -25,7 +25,7 @@ KEXT_DIR     = $(BUILD_DIR)/$(KEXT_NAME).kext
 CONTENTS_DIR = $(KEXT_DIR)/Contents
 
 # Sources
-SRCS = VerbifrostConnectXRDMA.cpp mlx5_cmd.cpp
+SRCS = VerbifrostConnectXRDMA.cpp mlx5_cmd.cpp mlx5_verbs.cpp
 
 # Flags
 CFLAGS = -arch $(ARCH) \
@@ -33,6 +33,7 @@ CFLAGS = -arch $(ARCH) \
          -isysroot $(SDKROOT) \
          -I$(KERNEL_HDR) \
          -I$(KERNEL_HDR)/IOKit \
+         -I./include \
          -I. \
          -Wall -Wextra \
          -std=c++17 \

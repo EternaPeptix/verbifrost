@@ -247,7 +247,7 @@ struct ib_ah {
 };
 
 struct ib_ah_attr {
-    struct ib_global_route grh;
+    uint8_t grh[64]; /* placeholder */
     uint16_t dlid;
     uint8_t port_num;
     uint8_t static_rate;
@@ -268,7 +268,7 @@ struct ib_device_ops {
                         void *uhw);
     int (*query_port)(struct ib_device *dev, uint32_t port, void *props);
     int (*get_port_immutable)(struct ib_device *dev, uint32_t port);
-    enum rdma_link_layer (*get_link_layer)(struct ib_device *dev,
+    int (*get_link_layer)(struct ib_device *dev,
                                            uint32_t port_num);
     int (*modify_device)(struct ib_device *dev, int mask, void *props);
     int (*modify_port)(struct ib_device *dev, uint32_t port, int mask,
