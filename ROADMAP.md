@@ -63,7 +63,7 @@ registers as an IORDMAFamily provider.
 
 ---
 
-## Phase 2: Verbs Implementation *(in progress — ~20%)*
+## Phase 2: Verbs Implementation *(in progress — ~50%)*
 
 **Goal:** The provider kext implements all verbs operations via IORDMAFamily.
 
@@ -74,18 +74,22 @@ registers as an IORDMAFamily provider.
 - [x] CQ: Completion Queue creation with DMA ring (create_cq / destroy_cq)
 - [x] CQ: poll_cq / req_notify_cq stubs
 - [x] MR: dereg_mr implementation
+- [x] MR: **reg_user_mr** (full: DMA pas list + CREATE_MKEY + lkey/rkey)
 - [x] AH: Address Handle (software-only for RoCEv2)
 - [x] query_device / query_port
-- [x] `mlx5_ib_init_ops()` — fills `ib_device_ops` with 14 verb implementations
+- [x] QP: **create_qp** (DMA SQ/RQ rings + doorbell records + CREATE_QP command)
+- [x] QP: **modify_qp** state machine (RESET → INIT → RTR → RTS)
+- [x] QP: **destroy_qp**
+- [x] Data path: **post_send** (WQE construction + BlueFlame doorbell)
+- [x] Data path: **post_recv** (RQE construction + doorbell record)
+- [x] `mlx5_ib_init_ops()` — fills `ib_device_ops` with all verbs
 
 **Remaining:**
-- [ ] QP: create_qp (most complex command, ~500 bytes of context)
-- [ ] QP: modify_qp state machine (RST → INIT → RTR → RTS)
-- [ ] QP: destroy_qp
-- [ ] MR: reg_user_mr (DMA page mapping + MTT setup)
-- [ ] Data path: post_send (WQE ring + BlueFlame doorbell)
-- [ ] Data path: post_recv (WQE ring)
 - [ ] EQ: Event Queue for interrupt-driven CQ completions
+- [ ] UAR: Map the BlueFlame doorbell register (from PCI BAR or dedicated UAR BAR)
+- [ ] poll_cq: Read CQEs from DMA ring (needs CQ ring virtual address in mlx5_ib_cq)
+- [ ] req_notify_cq: Arm CQ via UAR doorbell
+- [ ] reg_user_mr: userspace page mapping (currently uses kernel-contiguous)
 - [ ] End-to-end: RDMA WRITE between Mac and DGX Spark over RoCEv2
 
 **Dependencies:** Phase 1 dext + `com.apple.private.iokit.rdma` entitlement.
